@@ -15,6 +15,8 @@ namespace DBApi
         public DBBidsTable Bids;
         public DBUsersTable Users;
         public DBCookiesTable Cookies;
+        public DBInstrumentsTable Instruments;
+        public DBOrdersTable Orders;
 
         public DBWorker(string dbFilePath)
         {
@@ -33,6 +35,8 @@ namespace DBApi
             Bids = new DBBidsTable(connection);
             Users = new DBUsersTable(connection);
             Cookies = new DBCookiesTable(connection);
+            Instruments = new DBInstrumentsTable(connection);
+            Orders = new DBOrdersTable(connection);
         }
 
         public void Close()

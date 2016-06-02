@@ -60,6 +60,10 @@
     <Compile Include="DBBidsEntry.cs" />
     <Compile Include="DBCookie.cs" />
     <Compile Include="DBHelper.cs" />
+    <Compile Include="DBInstrument.cs" />
+    <Compile Include="DBInstrumentsTable.cs" />
+    <Compile Include="DBOrder.cs" />
+    <Compile Include="DBOrdersTable.cs" />
     <Compile Include="DBUser.cs" />
     <Compile Include="DBWorker.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

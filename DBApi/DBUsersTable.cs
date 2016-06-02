@@ -21,15 +21,17 @@ namespace DBApi
             List<DBUser> users = new List<DBUser>();
             if (connection != null)
             {
-                string sql = "SELECT id, login, password FROM " + USERS_TABLE_NAME;
+                string sql = string.Format("SELECT id, name, password, email, scype FROM {0}", USERS_TABLE_NAME);
                 SQLiteCommand command = new SQLiteCommand(sql, connection);
                 SQLiteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
                 {
                     DBUser user = new DBUser();
                     user.id = (long)reader["id"];
-                    user.login = (string)reader["login"];
+                    user.name = (string)reader["name"];
                     user.password = (string)reader["password"];
+                    user.email = (string)reader["email"];
+                    user.scype = (string)reader["scype"];
                     users.Add(user);
                 }
             }
@@ -43,28 +45,31 @@ namespace DBApi
             {
                 string loginWithEscaping = DBHelper.AddEscaping(login);
                 string passwordWithEscaping = DBHelper.AddEscaping(password);
-                string sql = "SELECT id, login, password FROM " + USERS_TABLE_NAME + " WHERE login = " + "\"" + loginWithEscaping + "\"" + " AND password = " + "\"" + passwordWithEscaping + "\"";
+                string sql = string.Format("SELECT id, name, password, email, scype FROM {0} WHERE login = {1} AND password = {2}", USERS_TABLE_NAME, "\"" + loginWithEscaping + "\"", "\"" + passwordWithEscaping + "\"");
                 SQLiteCommand command = new SQLiteCommand(sql, connection);
                 SQLiteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
                 {
                     DBUser user = new DBUser();
-                    user.id = (long)reader["id"];
-                    user.login = (string)reader["login"];
+                    user.name = (string)reader["name"];
                     user.password = (string)reader["password"];
+                    user.email = (string)reader["email"];
+                    user.scype = (string)reader["scype"];
                     users.Add(user);
                 }
             }
             return users;
         }
 
-        public int InsertUser(string login, string password)
+        public int InsertUser(string name, string password, string email, string scype)
         {
             if (connection != null)
             {
-                string loginWithEscaping = DBHelper.AddEscaping(login);
-                string passwordWithEscaping = DBHelper.AddEscaping(password);
-                string sql = "INSERT INTO " + USERS_TABLE_NAME + " (id, login, password) VALUES (" + "null, " + "\"" + loginWithEscaping + "\"" + ", " + "\"" + passwordWithEscaping + "\"" + ")";
+                string nameWithEscaping = DBHelper.AddEscaping(name);
+                string passwordMD5 = DBHelper.GetMD5(password);
+                string emailWithEscaping = DBHelper.AddEscaping(email);
+                string scypeWithEscaping = DBHelper.AddEscaping(scype);
+                string sql = string.Format("INSERT INTO {0} (id, name, password, email, scype) VALUES ({1},{2},{3},{4},{5})", USERS_TABLE_NAME, "null", "\"" + nameWithEscaping + "\"", "\"" + passwordMD5 + "\"", "\"" + emailWithEscaping + "\"", "\"" + scypeWithEscaping + "\"");
                 SQLiteCommand command = new SQLiteCommand(sql, connection);
                 return command.ExecuteNonQuery();
             }
@@ -73,7 +78,7 @@ namespace DBApi
 
         private void CreateTableIfNotExists()
         {
-            string sql = "create table if not exists " + USERS_TABLE_NAME + " (id INTEGER PRIMARY KEY AUTOINCREMENT, login TEXT, password TEXT)";
+            string sql = string.Format("create table if not exists {0} (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, password TEXT, email TEXT, scype TEXT)", USERS_TABLE_NAME);
             SQLiteCommand command = new SQLiteCommand(sql, connection);
             command.ExecuteNonQuery();
         }

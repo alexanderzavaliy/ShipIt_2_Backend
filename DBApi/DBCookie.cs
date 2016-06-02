@@ -13,7 +13,7 @@ namespace DBApi
         public DBCookie()
         {
             value = "";
-            expirationDate = DateTime.MinValue.ToUniversalTime().Ticks;
+            expirationDate = 0;
         }
     }
 }
