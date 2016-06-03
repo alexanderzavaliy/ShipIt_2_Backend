@@ -21,17 +21,12 @@ namespace DBApi
             List<DBUser> users = new List<DBUser>();
             if (connection != null)
             {
-                string sql = string.Format("SELECT id, name, password, email, scype FROM {0}", USERS_TABLE_NAME);
+                string sql = string.Format("SELECT * FROM {0}", USERS_TABLE_NAME);
                 SQLiteCommand command = new SQLiteCommand(sql, connection);
                 SQLiteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
                 {
-                    DBUser user = new DBUser();
-                    user.id = (long)reader["id"];
-                    user.name = (string)reader["name"];
-                    user.password = (string)reader["password"];
-                    user.email = (string)reader["email"];
-                    user.scype = (string)reader["scype"];
+                    DBUser user = ExtractUser(reader);
                     users.Add(user);
                 }
             }
@@ -45,16 +40,12 @@ namespace DBApi
             {
                 string loginWithEscaping = DBHelper.AddEscaping(login);
                 string passwordWithEscaping = DBHelper.AddEscaping(password);
-                string sql = string.Format("SELECT id, name, password, email, scype FROM {0} WHERE login = {1} AND password = {2}", USERS_TABLE_NAME, "\"" + loginWithEscaping + "\"", "\"" + passwordWithEscaping + "\"");
+                string sql = string.Format("SELECT * FROM {0} WHERE login = {1} AND password = {2}", USERS_TABLE_NAME, "\"" + loginWithEscaping + "\"", "\"" + passwordWithEscaping + "\"");
                 SQLiteCommand command = new SQLiteCommand(sql, connection);
                 SQLiteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
                 {
-                    DBUser user = new DBUser();
-                    user.name = (string)reader["name"];
-                    user.password = (string)reader["password"];
-                    user.email = (string)reader["email"];
-                    user.scype = (string)reader["scype"];
+                    DBUser user = ExtractUser(reader);
                     users.Add(user);
                 }
             }
@@ -81,6 +72,17 @@ namespace DBApi
             string sql = string.Format("create table if not exists {0} (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, password TEXT, email TEXT, scype TEXT)", USERS_TABLE_NAME);
             SQLiteCommand command = new SQLiteCommand(sql, connection);
             command.ExecuteNonQuery();
+        }
+
+        private DBUser ExtractUser(SQLiteDataReader reader)
+        {
+            DBUser user = new DBUser();
+            user.id = (long)reader["id"];
+            user.name = (string)reader["name"];
+            user.password = (string)reader["password"];
+            user.email = (string)reader["email"];
+            user.scype = (string)reader["scype"];
+            return user;
         }
     }
 }

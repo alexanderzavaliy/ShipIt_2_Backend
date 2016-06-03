@@ -22,15 +22,13 @@ namespace DBApi
             List<DBCookie> cookies = new List<DBCookie>();
             if (connection != null)
             {
-                string sql = "SELECT value, expirationDate FROM " + COOKIES_TABLE_NAME;
+                string sql = string.Format("SELECT * FROM ", COOKIES_TABLE_NAME);
                 SQLiteCommand command = new SQLiteCommand(sql, connection);
                 SQLiteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
                 {
-                    DBCookie user = new DBCookie();
-                    user.value = (string)reader["value"];
-                    user.expirationDate = (long)reader["expirationDate"];
-                    cookies.Add(user);
+                    DBCookie cookie = ExtractCookie(reader);
+                    cookies.Add(cookie);
                 }
             }
             return cookies;
@@ -42,26 +40,24 @@ namespace DBApi
             if (connection != null)
             {
                 string valueWithEscaping = DBHelper.AddEscaping(value);
-                string sql = "SELECT value, expirationDate FROM " + COOKIES_TABLE_NAME + " WHERE value = " + "\"" + valueWithEscaping + "\"";
+                string sql = string.Format("SELECT * FROM {0} WHERE value = {1}", COOKIES_TABLE_NAME, "\"" + valueWithEscaping + "\"");
                 SQLiteCommand command = new SQLiteCommand(sql, connection);
                 SQLiteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
                 {
-                    DBCookie user = new DBCookie();
-                    user.value = (string)reader["value"];
-                    user.expirationDate = (long)reader["expirationDate"];
-                    cookies.Add(user);
+                    DBCookie cookie = ExtractCookie(reader);
+                    cookies.Add(cookie);
                 }
             }
             return cookies;
         }
 
-        public int InsertCookie(string value, long expirationDate)
+        public int InsertCookie(long ownerId, string value, long expirationDate)
         {
             if (connection != null)
             {
                 string valueWithEscaping = DBHelper.AddEscaping(value);
-                string sql = "INSERT INTO " + COOKIES_TABLE_NAME + " (value, expirationDate) VALUES (" + "\"" + valueWithEscaping + "\"" + ", " + expirationDate + ")";
+                string sql = string.Format("INSERT INTO {0} (ownerId, value, expirationDate) VALUES ({1},{2},{3})", COOKIES_TABLE_NAME, ownerId, "\"" + valueWithEscaping + "\"", expirationDate);
                 SQLiteCommand command = new SQLiteCommand(sql, connection);
                 return command.ExecuteNonQuery();
             }
@@ -73,7 +69,7 @@ namespace DBApi
             if (connection != null)
             {
                 string valueWithEscaping = DBHelper.AddEscaping(value);
-                string sql = "DELETE FROM " + COOKIES_TABLE_NAME + " WHERE value = " + "\"" + value + "\"";
+                string sql = string.Format("DELETE FROM {0} WHERE value = {1}", COOKIES_TABLE_NAME, "\"" + valueWithEscaping + "\"");
                 SQLiteCommand command = new SQLiteCommand(sql, connection);
                 return command.ExecuteNonQuery();
             }
@@ -82,9 +78,18 @@ namespace DBApi
 
         private void CreateTableIfNotExists()
         {
-            string sql = "create table if not exists " + COOKIES_TABLE_NAME + " (value TEXT, expirationDate INTEGER)";
+            string sql = string.Format("create table if not exists {0} (ownerId INTEGER, value TEXT, expirationDate INTEGER)", COOKIES_TABLE_NAME);
             SQLiteCommand command = new SQLiteCommand(sql, connection);
             command.ExecuteNonQuery();
+        }
+
+        private DBCookie ExtractCookie(SQLiteDataReader reader)
+        {
+            DBCookie cookie = new DBCookie();
+            cookie.ownerId = (long)reader["ownerId"];
+            cookie.value = (string)reader["value"];
+            cookie.expirationDate = (long)reader["expirationDate"];
+            return cookie;
         }
     }
 }

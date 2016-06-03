@@ -23,16 +23,13 @@ namespace DBApi
             List<DBInstrument> instruments = new List<DBInstrument>();
             if (connection != null)
             {
-                string sql = "SELECT id, shortName, longName FROM " + INSTRUMENTS_TABLE_NAME;
+                string sql = string.Format("SELECT * FROM {0}", INSTRUMENTS_TABLE_NAME);
                 SQLiteCommand command = new SQLiteCommand(sql, connection);
                 SQLiteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
                 {
-                    DBInstrument user = new DBInstrument();
-                    user.id = (long)reader["id"];
-                    user.shortName = (string)reader["shortName"];
-                    user.longName = (string)reader["longName"];
-                    instruments.Add(user);
+                    DBInstrument instrument = ExtractInstrument(reader);
+                    instruments.Add(instrument);
                 }
             }
             return instruments;
@@ -44,7 +41,7 @@ namespace DBApi
             {
                 string shortNameWithEscaping = DBHelper.AddEscaping(shortName);
                 string longNameWithEscaping = DBHelper.AddEscaping(longName);
-                string sql = "INSERT INTO " + INSTRUMENTS_TABLE_NAME + " (id, shortName, longName) VALUES (" + "null, " + "\"" + shortNameWithEscaping + "\"" + ", " + "\"" + longNameWithEscaping + "\"" + ")";
+                string sql = string.Format("INSERT INTO {0} (id, shortName, longName) VALUES ({1},{2},{3})", INSTRUMENTS_TABLE_NAME, "null", "\"" + shortNameWithEscaping + "\"", "\"" + longNameWithEscaping + "\"");
                 SQLiteCommand command = new SQLiteCommand(sql, connection);
                 return command.ExecuteNonQuery();
             }
@@ -53,9 +50,18 @@ namespace DBApi
 
         private void CreateTableIfNotExists()
         {
-            string sql = "create table if not exists " + INSTRUMENTS_TABLE_NAME + " (id INTEGER PRIMARY KEY, shortName TEXT, longName TEXT)";
+            string sql = string.Format("create table if not exists {0} (id INTEGER PRIMARY KEY, shortName TEXT, longName TEXT)", INSTRUMENTS_TABLE_NAME);
             SQLiteCommand command = new SQLiteCommand(sql, connection);
             command.ExecuteNonQuery();
+        }
+
+        private DBInstrument ExtractInstrument(SQLiteDataReader reader)
+        {
+            DBInstrument instrument = new DBInstrument();
+            instrument.id = (long)reader["id"];
+            instrument.shortName = (string)reader["shortName"];
+            instrument.longName = (string)reader["longName"];
+            return instrument;
         }
     }
 }

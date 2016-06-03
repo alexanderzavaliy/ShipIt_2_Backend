@@ -12,7 +12,6 @@ namespace DBApi
     {
         private string dbFilePath;
         private SQLiteConnection connection;
-        public DBBidsTable Bids;
         public DBUsersTable Users;
         public DBCookiesTable Cookies;
         public DBInstrumentsTable Instruments;
@@ -31,8 +30,8 @@ namespace DBApi
             }
             connection = new SQLiteConnection("Data Source=" + dbFilePath + ";" + "Version=3;");
             connection.Open();
+            connection.Update += new SQLiteUpdateEventHandler(OnDBUpdate);
 
-            Bids = new DBBidsTable(connection);
             Users = new DBUsersTable(connection);
             Cookies = new DBCookiesTable(connection);
             Instruments = new DBInstrumentsTable(connection);
@@ -45,6 +44,11 @@ namespace DBApi
             {
                 connection.Close();
             }
+        }
+
+        private void OnDBUpdate(object sender, UpdateEventArgs e)
+        {
+            System.Diagnostics.Debug.WriteLine("On DBUpdate() called");   
         }
     }
 }

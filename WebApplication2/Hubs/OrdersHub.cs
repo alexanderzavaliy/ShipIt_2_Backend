@@ -3,15 +3,17 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Web;
 using Microsoft.AspNet.SignalR;
-using DBApi;
 using System.Text;
+using System.Threading.Tasks;
+using DBApi;
+
 
 namespace WebApplication2.Hubs
 {
     public class OrdersHub : Hub
     {
         private static DBWorker dbWorker;
-        private static string LOGIN_COOKIE_NAME = "bidsAuthInfo";
+        private static string LOGIN_COOKIE_NAME = "ordersAuthInfo";
         static OrdersHub()
         {
             AppDomain.CurrentDomain.ProcessExit += new EventHandler(StaticDestructor);
@@ -24,13 +26,21 @@ namespace WebApplication2.Hubs
             dbWorker.Close();
         }
 
-        public List<DBOrder> GetAllOrders()
+        public void GetAllOrders(string cookies)
         {
             System.Diagnostics.Debug.WriteLine("GetAllOrders called");
-            List<DBOrder> orders = dbWorker.Orders.SelectAllOrders();
-            Clients.Caller.jsAddBids(orders);
-            return orders;
-        }
+            string authCookieValue = ExtractAuthCookieValue(cookies);
+            DBCookie dbCookie = null;
+            if (isValidAuthCookieValue(authCookieValue, ref dbCookie))
+            {
+                List<DBOrder> orders = dbWorker.Orders.SelectAllOrders();
+                Clients.Caller.jsAddOrders(orders);
+            }
+            else 
+            {
+                HandleInvalidCookies(authCookieValue);
+            }
+         }
 
         public List<DBOrder> GetOrdersForOwner(string cookies)
         {
@@ -40,7 +50,7 @@ namespace WebApplication2.Hubs
             // TODO: 1. validate cookies, find out ownerId using them
             //       
             List<DBOrder> orders = dbWorker.Orders.SelectOrdersForOwner(ownerId);
-            Clients.Caller.jsAddBids(orders);
+            Clients.Caller.jsAddOrder(orders);
             return orders;
         }
 
@@ -58,7 +68,7 @@ namespace WebApplication2.Hubs
             if (insertResult > 0)
             {
                 List<DBOrder> insertedOrder = OrdersHub.dbWorker.Orders.SelectLastOrderForOwner(ownerId);
-                Clients.All.jsAddBids(insertedOrder);
+                Clients.All.jsAddOrders(insertedOrder);
                 return true;
             }
             return false;
@@ -79,25 +89,91 @@ namespace WebApplication2.Hubs
             return false;
         }
 
+        public void LockOrder(long id, string cookies)
+        {
+            System.Diagnostics.Debug.WriteLine("LockOrder called");
+            DBCookie dbCookie = null;
+            string authCookieValue = ExtractAuthCookieValue(cookies);
+            if (isValidAuthCookieValue(authCookieValue, ref dbCookie))
+            {
+                List<DBOrder> orders = dbWorker.Orders.SelectOrdersById(id);
+                if (orders.Count > 0)
+                {
+                    DBOrder order = orders[0];
+                    bool orderIsNew = order.status.Equals(DBOrder.Status.NEW);
+                    if (orderIsNew)
+                    {
+                        int updateResult = dbWorker.Orders.UpdateOrder(order.id, order.ownerId, order.instrumentId, order.createdDate, order.endDate, order.type, order.price, order.amount, DBOrder.Status.LOCKED, dbCookie.ownerId, DateTime.Now.Ticks);
+                        if (updateResult > 0)
+                        {
+                            List<DBOrder> updatedOrders = dbWorker.Orders.SelectOrdersById(order.id);
+                            if (updatedOrders.Count > 0)
+                            {
+                                order = updatedOrders[0];
+                                Clients.Caller.jsLockOrderAccepted(order, true);
+                                Clients.Others.jsLockOrderAccepted(order, false);
+                                UnlockAfterTimeout(order);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        
+                    }
+                }
+            }
+            else
+            {
+                HandleInvalidCookies(authCookieValue);
+            }
+        }
+
+        private void UnlockAfterTimeout(DBOrder lockedOrder)
+        {
+
+            Task.Factory.StartNew(() => 
+            {
+                int lockTimeout = 30000;
+                System.Threading.Thread.Sleep(lockTimeout);
+                List<DBOrder> orders = dbWorker.Orders.SelectOrdersById(lockedOrder.id);
+                if (orders.Count > 0)
+                {
+                    if (orders[0].status.Equals(DBOrder.Status.LOCKED))
+                    {
+                        int updateResult = dbWorker.Orders.UpdateOrder(lockedOrder.id, lockedOrder.ownerId, lockedOrder.instrumentId, lockedOrder.createdDate, lockedOrder.endDate, lockedOrder.type, lockedOrder.price, lockedOrder.amount, DBOrder.Status.NEW, 0, 0);
+                        if (updateResult > 0)
+                        {
+                            List<DBOrder> updatedOrders = dbWorker.Orders.SelectOrdersById(lockedOrder.id);
+                            if (updatedOrders.Count > 0)
+                            {
+                                Clients.All.jsUnlockOrder(updatedOrders[0]);
+                            }
+                        }
+                    }
+                }
+            });
+
+        }
+
         public void Login(string name, string password)
         {
             System.Diagnostics.Debug.WriteLine("Login called");
             List<DBUser> users = dbWorker.Users.SelectAllUsers();
-            bool userFound = false;
+            long ownerId = -1;
             foreach (DBUser user in users)
             {
                 if (user.name.Equals(name) && user.password.Equals(DBHelper.GetMD5(password)))
                 {
-                    userFound = true;
+                    ownerId = user.id;
                     break;
                 }
             }
-            if (userFound)
+            if (ownerId != -1)
             {
                 int lifetimeDays = 1;
                 string cookie = CreateCookie();
                 long expirationDate = DateTime.Now.AddDays(lifetimeDays).Ticks;
-                if (dbWorker.Cookies.InsertCookie(cookie, expirationDate) > 0)
+                if (dbWorker.Cookies.InsertCookie(ownerId, cookie, expirationDate) > 0)
                 {
                     Clients.Caller.jsCreateCookie("", OrdersHub.LOGIN_COOKIE_NAME, cookie, lifetimeDays);
                 }
@@ -111,6 +187,25 @@ namespace WebApplication2.Hubs
         public void Logout(string cookies)
         {
             System.Diagnostics.Debug.WriteLine("Logout called" + " " + cookies);
+            string authCookieValue = ExtractAuthCookieValue(cookies);
+            HandleInvalidCookies(authCookieValue);
+        }
+
+        private string CreateCookie()
+        {
+            List<DBCookie> dbCookies = new List<DBCookie>();
+            string cookieCandidate = "";
+            do
+            {
+                cookieCandidate = GenerateRandomString();
+                dbCookies = dbWorker.Cookies.SelectCookie(cookieCandidate);
+            }
+            while (dbCookies.Count > 0);
+            return cookieCandidate;
+        }
+
+        private string ExtractAuthCookieValue(string cookies)
+        {
             string cookieNameAndValue = null;
             string[] parts = cookies.Split(';');
             foreach (string part in parts)
@@ -130,27 +225,35 @@ namespace WebApplication2.Hubs
                 if (parts.Length == 2)
                 {
                     cookieValue = parts[1];
-                    if (dbWorker.Cookies.DeleteCookie(cookieValue) >= 0)
-                    {
-                        Clients.Caller.jsDeleteCookie(OrdersHub.LOGIN_COOKIE_NAME);
-                    }
                 }
             }
-        
+            return cookieValue;
+        }
+        private bool isValidAuthCookieValue(string authCookieValue, ref DBCookie dbCookie)
+        {
+            if (authCookieValue != null)
+            {
+                List<DBCookie> dbCookies = dbWorker.Cookies.SelectCookie(authCookieValue);
+                if (dbCookies.Count() > 0)
+                {
+                    dbCookie = dbCookies[0];
+                    long currentDate = DateTime.Now.Ticks;
+                    long dbCookieExpirationDate = dbCookies[0].expirationDate;
+                    return (currentDate < dbCookieExpirationDate) ? true : false;
+                }
+            }
+            return false;
         }
 
-        private string CreateCookie()
+        private void HandleInvalidCookies(string authCookieValue)
         {
-            List<DBCookie> dbCookies = new List<DBCookie>();
-            string cookieCandidate = "";
-            do
+            if (authCookieValue != null)
             {
-                cookieCandidate = GenerateRandomString();
-                dbCookies = dbWorker.Cookies.SelectCookie(cookieCandidate);
+                dbWorker.Cookies.DeleteCookie(authCookieValue);
             }
-            while (dbCookies.Count > 0);
-            return cookieCandidate;
+            Clients.Caller.jsDeleteCookie(OrdersHub.LOGIN_COOKIE_NAME);
         }
+
         private string GenerateRandomString()
         {
             string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";

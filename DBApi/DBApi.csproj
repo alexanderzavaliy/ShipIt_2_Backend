@@ -55,9 +55,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="DBBidsTable.cs" />
     <Compile Include="DBCookiesTable.cs" />
-    <Compile Include="DBBidsEntry.cs" />
     <Compile Include="DBCookie.cs" />
     <Compile Include="DBHelper.cs" />
     <Compile Include="DBInstrument.cs" />

@@ -34,5 +34,12 @@ namespace DBApi
             executorId = 0;
             executionDate = 0;
         }
+
+        public class Status
+        {
+            public const string NEW = "New";
+            public const string LOCKED = "Locked";
+            public const string EXECUTED = "Executed";
+        }
     }
 }
