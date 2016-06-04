@@ -36,6 +36,23 @@ namespace DBApi
             return orders;
         }
 
+        public List<DBOrder> SelectAllNotExecutedOrders()
+        {
+            List<DBOrder> orders = new List<DBOrder>();
+            if (connection != null)
+            {
+                string sql = string.Format("SELECT * FROM {0} WHERE status <> {1} ORDER BY type", ORDERS_TABLE_NAME, DBOrder.Status.EXECUTED);
+                SQLiteCommand command = new SQLiteCommand(sql, connection);
+                SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    DBOrder order = ExtractOrder(reader);
+                    orders.Add(order);
+                }
+            }
+            return orders;
+        }
+
         public List<DBOrder> SelectLastOrderForOwner(long ownerId)
         {
             List<DBOrder> orders = new List<DBOrder>();

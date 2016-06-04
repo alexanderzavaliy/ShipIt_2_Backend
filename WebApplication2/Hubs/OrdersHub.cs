@@ -89,7 +89,7 @@ namespace WebApplication2.Hubs
             return false;
         }
 
-        public void LockOrder(long id, string cookies)
+        public void LockOrder(string cookies, long id)
         {
             System.Diagnostics.Debug.WriteLine("LockOrder called");
             DBCookie dbCookie = null;
@@ -101,6 +101,7 @@ namespace WebApplication2.Hubs
                 {
                     DBOrder order = orders[0];
                     bool orderIsNew = order.status.Equals(DBOrder.Status.NEW);
+                    bool orderIsLocked = order.status.Equals(DBOrder.Status.LOCKED);
                     if (orderIsNew)
                     {
                         int updateResult = dbWorker.Orders.UpdateOrder(order.id, order.ownerId, order.instrumentId, order.createdDate, order.endDate, order.type, order.price, order.amount, DBOrder.Status.LOCKED, dbCookie.ownerId, DateTime.Now.Ticks);
@@ -116,9 +117,15 @@ namespace WebApplication2.Hubs
                             }
                         }
                     }
-                    else
+                    else if (orderIsLocked)
                     {
-                        
+                        bool callerIsExecutor = dbCookie.ownerId.Equals(order.executorId);
+                        Clients.Caller.jsLockOrderAccepted(order, callerIsExecutor);
+                        Clients.Others.jsLockOrderAccepted(order, callerIsExecutor);
+                    }
+                    else
+                    { 
+                        // No actions if order.Status = "Executed"
                     }
                 }
             }
@@ -153,6 +160,41 @@ namespace WebApplication2.Hubs
                 }
             });
 
+        }
+
+        public void ExecuteOrder(string cookies, long id)
+        {
+            System.Diagnostics.Debug.WriteLine("ExecuteOrder called");
+            DBCookie dbCookie = null;
+            string authCookieValue = ExtractAuthCookieValue(cookies);
+            if (isValidAuthCookieValue(authCookieValue, ref dbCookie))
+            {
+                List<DBOrder> orders = dbWorker.Orders.SelectOrdersById(id);
+                if (orders.Count > 0)
+                {
+                    DBOrder order = orders[0];
+                    bool orderIsNew = order.status.Equals(DBOrder.Status.NEW);
+                    bool orderIsLockedByCaller = (order.status.Equals(DBOrder.Status.LOCKED) && dbCookie.ownerId.Equals(order.executorId));
+                    if (orderIsNew || orderIsLockedByCaller)
+                    {
+                        int updateResult = dbWorker.Orders.UpdateOrder(order.id, order.ownerId, order.instrumentId, order.createdDate, order.endDate, order.type, order.price, order.amount, DBOrder.Status.EXECUTED, dbCookie.ownerId, DateTime.Now.Ticks);
+                        if (updateResult > 0)
+                        {
+                            List<DBOrder> updatedOrders = dbWorker.Orders.SelectOrdersById(order.id);
+                            if (updatedOrders.Count > 0)
+                            {
+                                order = updatedOrders[0];
+                                Clients.Caller.jsExecuteOrderAccepted(order);
+                                UnlockAfterTimeout(order);
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                HandleInvalidCookies(authCookieValue);
+            }
         }
 
         public void Login(string name, string password)
