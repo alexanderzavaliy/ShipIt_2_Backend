@@ -26,6 +26,20 @@ namespace WebApplication2.Hubs
             dbWorker.Close();
         }
 
+        public void ValidateCookies(string cookies)
+        {
+            string authCookieValue = ExtractAuthCookieValue(cookies);
+            DBCookie dbCookie = null;
+            if (isValidAuthCookieValue(authCookieValue, ref dbCookie))
+            {
+                Clients.Caller.jsValidCookie();
+            }
+            else
+            {
+                HandleInvalidCookies(authCookieValue);
+            }
+        }
+
         public void GetAllOrders(string cookies)
         {
             System.Diagnostics.Debug.WriteLine("GetAllOrders called");
@@ -57,19 +71,24 @@ namespace WebApplication2.Hubs
         public bool InsertOrder(string cookies, long instrumentId, long endDate, string type, double price, int amount)
         {
             System.Diagnostics.Debug.WriteLine("InsertOrder called");
-            long ownerId = 0;
-            long createdDate = DateTime.Now.ToUniversalTime().Ticks;
-            string status = "New";
-            //
-            // TODO: 1. validate cookies, find out ownerId using them
-            //       2. get currentDate
-            //       3. get endDate
-            int insertResult = OrdersHub.dbWorker.Orders.InsertOrder(ownerId, instrumentId, createdDate, endDate, type, price, amount, status, 0, 0);
-            if (insertResult > 0)
+            string authCookieValue = ExtractAuthCookieValue(cookies);
+            DBCookie dbCookie = null;
+            if (isValidAuthCookieValue(authCookieValue, ref dbCookie))
             {
-                List<DBOrder> insertedOrder = OrdersHub.dbWorker.Orders.SelectLastOrderForOwner(ownerId);
-                Clients.All.jsAddOrders(insertedOrder);
-                return true;
+                int insertResult = OrdersHub.dbWorker.Orders.InsertOrder(dbCookie.ownerId, instrumentId, DateTime.Now.Ticks, endDate, type, price, amount, DBOrder.Status.NEW, 0, 0);
+                if (insertResult > 0)
+                {
+                    List<DBOrder> insertedOrder = OrdersHub.dbWorker.Orders.SelectLastOrderForOwner(dbCookie.ownerId);
+                    if (insertedOrder.Count > 0)
+                    {
+                        Clients.All.jsAddOrder(insertedOrder[0]);
+                        return true;
+                    }
+                }
+            }
+            else
+            {
+                HandleInvalidCookies(authCookieValue);
             }
             return false;
         }
@@ -248,25 +267,28 @@ namespace WebApplication2.Hubs
 
         private string ExtractAuthCookieValue(string cookies)
         {
-            string cookieNameAndValue = null;
-            string[] parts = cookies.Split(';');
-            foreach (string part in parts)
+            string cookieValue = "";
+            if (cookies != null)
             {
-                string trimmedPart = part.Trim();
-                if (trimmedPart.StartsWith(OrdersHub.LOGIN_COOKIE_NAME))
+                string cookieNameAndValue = null;
+                string[] parts = cookies.Split(';');
+                foreach (string part in parts)
                 {
-                    cookieNameAndValue = trimmedPart;
-                    break;
+                    string trimmedPart = part.Trim();
+                    if (trimmedPart.StartsWith(OrdersHub.LOGIN_COOKIE_NAME))
+                    {
+                        cookieNameAndValue = trimmedPart;
+                        break;
+                    }
                 }
-            }
 
-            string cookieValue = null;
-            if (cookieNameAndValue != null)
-            {
-                parts = cookieNameAndValue.Split('=');
-                if (parts.Length == 2)
+                if (cookieNameAndValue != null)
                 {
-                    cookieValue = parts[1];
+                    parts = cookieNameAndValue.Split('=');
+                    if (parts.Length == 2)
+                    {
+                        cookieValue = parts[1];
+                    }
                 }
             }
             return cookieValue;
