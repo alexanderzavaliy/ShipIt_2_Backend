@@ -58,7 +58,7 @@ namespace DBApi
             List<DBOrder> orders = new List<DBOrder>();
             if (connection != null)
             {
-                string sql = string.Format("SELECT * FROM {0} WHERE id = {1} AND id = (SELECT MAX(id) FROM {0} WHERE ownerId = {1})", ORDERS_TABLE_NAME, ownerId);
+                string sql = string.Format("SELECT * FROM {0} WHERE ownerId = {1} AND id = (SELECT MAX(id) FROM {0} WHERE ownerId = {1})", ORDERS_TABLE_NAME, ownerId);
                 SQLiteCommand command = new SQLiteCommand(sql, connection);
                 SQLiteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
