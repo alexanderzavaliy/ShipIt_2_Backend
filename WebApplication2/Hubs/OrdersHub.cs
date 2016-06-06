@@ -68,21 +68,26 @@ namespace WebApplication2.Hubs
             return orders;
         }
 
-        public bool InsertOrder(string cookies, long instrumentId, long endDate, string type, double price, int amount)
+        public bool InsertOrder(string cookies, string instrumentShortName, string type, double price, int amount)
         {
             System.Diagnostics.Debug.WriteLine("InsertOrder called");
             string authCookieValue = ExtractAuthCookieValue(cookies);
             DBCookie dbCookie = null;
             if (isValidAuthCookieValue(authCookieValue, ref dbCookie))
             {
-                int insertResult = OrdersHub.dbWorker.Orders.InsertOrder(dbCookie.ownerId, instrumentId, DateTime.Now.Ticks, endDate, type, price, amount, DBOrder.Status.NEW, 0, 0);
-                if (insertResult > 0)
+                List<long> instrumentIds = dbWorker.Instruments.SelectInstrumentsIdsByShortName(instrumentShortName);
+                if (instrumentIds.Count > 0)
                 {
-                    List<DBOrder> insertedOrder = OrdersHub.dbWorker.Orders.SelectLastOrderForOwner(dbCookie.ownerId);
-                    if (insertedOrder.Count > 0)
+                    long instrumentId = instrumentIds[0];
+                    int insertResult = OrdersHub.dbWorker.Orders.InsertOrder(dbCookie.ownerId, instrumentId, DateTime.Now.Ticks, 0, type, price, amount, DBOrder.Status.NEW, 0, 0);
+                    if (insertResult > 0)
                     {
-                        Clients.All.jsAddOrder(insertedOrder[0]);
-                        return true;
+                        List<DBOrder> insertedOrder = OrdersHub.dbWorker.Orders.SelectLastOrderForOwner(dbCookie.ownerId);
+                        if (insertedOrder.Count > 0)
+                        {
+                            Clients.All.jsAddOrder(insertedOrder[0]);
+                            return true;
+                        }
                     }
                 }
             }

@@ -11,7 +11,7 @@ namespace DBApi
     {
         private SQLiteConnection connection;
         private const string INSTRUMENTS_TABLE_NAME = "Instruments";
-        
+
         public DBInstrumentsTable(SQLiteConnection connection)
         {
             this.connection = connection;
@@ -33,6 +33,23 @@ namespace DBApi
                 }
             }
             return instruments;
+        }
+
+        public List<long> SelectInstrumentsIdsByShortName(string shortName)
+        {
+            List<long> instrumentIds = new List<long>();
+            if (connection != null)
+            {
+                string sql = string.Format("SELECT id FROM {0} WHERE shortName = {1}", INSTRUMENTS_TABLE_NAME, "\"" + shortName + "\"");
+                SQLiteCommand command = new SQLiteCommand(sql, connection);
+                SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    long instrumentId = (long)reader["id"]; ;
+                    instrumentIds.Add(instrumentId);
+                }
+            }
+            return instrumentIds;
         }
 
         public int InsertInstrument(string shortName, string longName)
