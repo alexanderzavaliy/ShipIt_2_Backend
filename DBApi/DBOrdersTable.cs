@@ -41,7 +41,7 @@ namespace DBApi
             List<DBOrder> orders = new List<DBOrder>();
             if (connection != null)
             {
-                string sql = string.Format("SELECT * FROM {0} WHERE status <> {1} ORDER BY type", ORDERS_TABLE_NAME, DBOrder.Status.EXECUTED);
+                string sql = string.Format("SELECT * FROM {0} WHERE status <> {1} ORDER BY type", ORDERS_TABLE_NAME, "\"" + DBOrder.Status.EXECUTED + "\"");
                 SQLiteCommand command = new SQLiteCommand(sql, connection);
                 SQLiteDataReader reader = command.ExecuteReader();
                 while (reader.Read())
@@ -76,6 +76,24 @@ namespace DBApi
             if (connection != null)
             {
                 string sql = string.Format("SELECT * FROM {0} WHERE ownerId = {1}", ORDERS_TABLE_NAME, ownerId);
+                SQLiteCommand command = new SQLiteCommand(sql, connection);
+                SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    DBOrder order = ExtractOrder(reader);
+                    orders.Add(order);
+                }
+            }
+            return orders;
+        }
+
+        public List<DBOrder> SelectOrdersRelatedToUser(long ownerOrExecutorId, long backtimePeriod)
+        {
+            List<DBOrder> orders = new List<DBOrder>();
+            if (connection != null)
+            {
+                long oldestDate = DateTime.Now.Ticks - backtimePeriod;
+                string sql = string.Format("SELECT * FROM {0} WHERE status = {1} AND (ownerId = {2} OR executorId = {2}) AND (executionDate > {3})", ORDERS_TABLE_NAME, "\"" + DBOrder.Status.EXECUTED + "\"",  ownerOrExecutorId, oldestDate);
                 SQLiteCommand command = new SQLiteCommand(sql, connection);
                 SQLiteDataReader reader = command.ExecuteReader();
                 while (reader.Read())

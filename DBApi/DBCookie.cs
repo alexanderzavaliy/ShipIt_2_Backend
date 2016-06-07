@@ -8,9 +8,9 @@ namespace DBApi
 {
     public class DBCookie
     {
-        public long ownerId;
-        public string value;
-        public long expirationDate;
+        public long ownerId { get; set; }
+        public string value { get; set; }
+        public long expirationDate { get; set; }
         public DBCookie()
         {
             ownerId = 0;

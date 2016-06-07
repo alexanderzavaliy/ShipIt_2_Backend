@@ -35,6 +35,23 @@ namespace DBApi
             return instruments;
         }
 
+        public List<DBInstrument> SelectInstrumentById(long id)
+        {
+            List<DBInstrument> instruments = new List<DBInstrument>();
+            if (connection != null)
+            {
+                string sql = string.Format("SELECT * FROM {0} WHERE id = {1}", INSTRUMENTS_TABLE_NAME, id);
+                SQLiteCommand command = new SQLiteCommand(sql, connection);
+                SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    DBInstrument instrument = ExtractInstrument(reader);
+                    instruments.Add(instrument);
+                }
+            }
+            return instruments;
+        }
+
         public List<long> SelectInstrumentsIdsByShortName(string shortName)
         {
             List<long> instrumentIds = new List<long>();

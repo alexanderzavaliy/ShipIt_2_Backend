@@ -8,11 +8,11 @@ namespace DBApi
 {
     public class DBUser
     {
-        public long id;
-        public string name;
-        public string password;
-        public string email;
-        public string scype;
+        public long id { get; set; }
+        public string name { get; set; }
+        public string password { get; set; }
+        public string email { get; set; }
+        public string scype { get; set; }
 
         public DBUser()
         {

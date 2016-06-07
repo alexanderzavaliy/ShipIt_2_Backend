@@ -12,10 +12,10 @@ namespace DBApi
     {
         private string dbFilePath;
         private SQLiteConnection connection;
-        public DBUsersTable Users;
-        public DBCookiesTable Cookies;
-        public DBInstrumentsTable Instruments;
-        public DBOrdersTable Orders;
+        public DBUsersTable Users { get; set; }
+        public DBCookiesTable Cookies { get; set; }
+        public DBInstrumentsTable Instruments { get; set; }
+        public DBOrdersTable Orders { get; set; }
 
         public DBWorker(string dbFilePath)
         {

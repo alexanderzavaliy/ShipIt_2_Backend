@@ -8,9 +8,9 @@ namespace DBApi
 {
     public class DBInstrument
     {
-        public long id;
-        public string shortName;
-        public string longName;
+        public long id { get; set; }
+        public string shortName { get; set; }
+        public string longName { get; set; }
 
         public DBInstrument()
         {

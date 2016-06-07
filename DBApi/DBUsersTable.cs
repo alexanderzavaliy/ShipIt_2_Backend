@@ -52,6 +52,23 @@ namespace DBApi
             return users;
         }
 
+        public List<DBUser> SelectUserById(long id)
+        {
+            List<DBUser> users = new List<DBUser>();
+            if (connection != null)
+            {
+                string sql = string.Format("SELECT * FROM {0} WHERE id = {1}", USERS_TABLE_NAME,id);
+                SQLiteCommand command = new SQLiteCommand(sql, connection);
+                SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    DBUser user = ExtractUser(reader);
+                    users.Add(user);
+                }
+            }
+            return users;
+        }
+
         public int InsertUser(string name, string password, string email, string scype)
         {
             if (connection != null)
