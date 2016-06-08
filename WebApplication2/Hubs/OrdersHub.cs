@@ -68,7 +68,7 @@ namespace WebApplication2.Hubs
             DBCookie dbCookie = null;
             if (isValidAuthCookieValue(authCookieValue, ref dbCookie))
             {
-                Clients.Caller.jsValidCookie();
+                Clients.Caller.jsValidCookie(dbCookie.ownerId);
             }
             else
             {
@@ -165,24 +165,25 @@ namespace WebApplication2.Hubs
                     IList<string> othersConnectionIds = connectionManager.GetConnectionIdsExcept(dbCookie.ownerId);
                     if (orderIsNew)
                     {
-                        int updateResult = dbWorker.Orders.UpdateOrder(order.id, order.ownerId, order.instrumentId, order.createdDate, order.endDate, order.type, order.price, order.amount, DBOrder.Status.LOCKED, dbCookie.ownerId, DateTime.Now.Ticks);
+                        string lockedStatus = DBOrder.Status.LOCKED;
+                        long lockedExecutorId = dbCookie.ownerId;
+                        long lockedExecutionDate = DateTime.Now.Ticks;
+                        int updateResult = dbWorker.Orders.UpdateOrder(order.id, order.ownerId, order.instrumentId, order.createdDate, order.endDate, order.type, order.price, order.amount, lockedStatus, lockedExecutorId, lockedExecutionDate);
                         if (updateResult > 0)
                         {
-                            List<DBOrder> updatedOrders = dbWorker.Orders.SelectOrdersById(order.id);
-                            if (updatedOrders.Count > 0)
+                            order.status = lockedStatus;
+                            order.executorId = lockedExecutorId;
+                            order.executionDate = lockedExecutionDate;
+                            Clients.Client(Context.ConnectionId).jsLockOrderAccepted(order, "true");
+                            foreach (string connectionId in lockerConnectionIds)
                             {
-                                order = updatedOrders[0];
-                                Clients.Client(Context.ConnectionId).jsLockOrderAccepted(order, "true");
-                                foreach (string connectionId in lockerConnectionIds)
+                                if (connectionId != Context.ConnectionId)
                                 {
-                                    if (connectionId != Context.ConnectionId)
-                                    {
-                                        Clients.Client(connectionId).jsLockOrderAccepted(order, "true_other");
-                                    }
+                                    Clients.Client(connectionId).jsLockOrderAccepted(order, "true_other");
                                 }
-                                Clients.Clients(othersConnectionIds).jsLockOrderAccepted(order, "false");
-                                UnlockAfterTimeout(order);
                             }
+                            Clients.Clients(othersConnectionIds).jsLockOrderAccepted(order, "false");
+                            UnlockAfterTimeout(order);
                         }
                     }
                     else if (orderIsLocked)
@@ -232,12 +233,49 @@ namespace WebApplication2.Hubs
                     }
                 }
             });
-
         }
 
-        public void ExecuteOrder(long id)
+        public void UnlockOrder(long id)
         {
-            System.Diagnostics.Debug.WriteLine("ExecuteOrder called");
+            System.Diagnostics.Debug.WriteLine("UnLockOrder called");
+            string authCookieValue = GetAuthCookieValue();
+            DBCookie dbCookie = null;
+            if (isValidAuthCookieValue(authCookieValue, ref dbCookie))
+            {
+                List<DBOrder> orders = dbWorker.Orders.SelectOrdersById(id);
+                if (orders.Count > 0)
+                {
+                    DBOrder order = orders[0];
+                    bool orderIsLocked = order.status.Equals(DBOrder.Status.LOCKED);
+                    if (orderIsLocked)
+                    {
+                        if (dbCookie.ownerId.Equals(order.executorId))
+                        {
+                            string unlockedStatus = DBOrder.Status.NEW;
+                            long unlockedExecutorId = 0;
+                            long unlockedExecutionDate = 0;
+
+                            int updateResult = dbWorker.Orders.UpdateOrder(order.id, order.ownerId, order.instrumentId, order.createdDate, order.endDate, order.type, order.price, order.amount, unlockedStatus, unlockedExecutorId, unlockedExecutionDate);
+                            if (updateResult > 0)
+                            {
+                                order.status = unlockedStatus;
+                                order.executorId = unlockedExecutorId;
+                                order.executionDate = unlockedExecutionDate;
+                                Clients.All.jsUnlockOrder(orders[0]);
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                HandleInvalidCookies(authCookieValue);
+            }
+        }
+
+        public void PendingOrder(long id)
+        {
+            System.Diagnostics.Debug.WriteLine("PendingOrder called");
             string authCookieValue = GetAuthCookieValue();
             DBCookie dbCookie = null;
             if (isValidAuthCookieValue(authCookieValue, ref dbCookie))
@@ -252,19 +290,70 @@ namespace WebApplication2.Hubs
                     IList<string> ownerConnectionIds = connectionManager.GetConnectionIdsExcept(dbCookie.ownerId);
                     if (orderIsNew || orderIsLockedByCaller)
                     {
+                        string pendingStatus = DBOrder.Status.PENDING;
+                        long executorId = dbCookie.ownerId;
                         long executionDate = DateTime.Now.Ticks;
-                        int updateResult = dbWorker.Orders.UpdateOrder(order.id, order.ownerId, order.instrumentId, order.createdDate, executionDate, order.type, order.price, order.amount, DBOrder.Status.EXECUTED, dbCookie.ownerId, executionDate);
+                        int updateResult = dbWorker.Orders.UpdateOrder(order.id, order.ownerId, order.instrumentId, order.createdDate, executionDate, order.type, order.price, order.amount, pendingStatus, executorId, executionDate);
                         if (updateResult > 0)
                         {
-                            List<DBOrder> updatedOrders = dbWorker.Orders.SelectOrdersById(order.id);
-                            if (updatedOrders.Count > 0)
+                            order.status = pendingStatus;
+                            order.executorId = executorId;
+                            order.executionDate = executionDate;
+                            Clients.All.jsPendingOrderDone(order);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                HandleInvalidCookies(authCookieValue);
+            }
+        }
+
+        public void ExecuteOrder(long id, bool accepted)
+        {
+            System.Diagnostics.Debug.WriteLine("ExecuteOrder called");
+            string authCookieValue = GetAuthCookieValue();
+            DBCookie dbCookie = null;
+            if (isValidAuthCookieValue(authCookieValue, ref dbCookie))
+            {
+                List<DBOrder> orders = dbWorker.Orders.SelectOrdersById(id);
+                if (orders.Count > 0)
+                {
+                    DBOrder order = orders[0];
+                    bool orderIsPending = order.status.Equals(DBOrder.Status.PENDING);
+                    IList<string> executorConnectionIds = connectionManager.GetConnectionIds(dbCookie.ownerId);
+                    IList<string> ownerConnectionIds = connectionManager.GetConnectionIdsExcept(dbCookie.ownerId);
+                    if (orderIsPending)
+                    {
+                        long executorId = dbCookie.ownerId;
+                        long executionDate = DateTime.Now.Ticks;
+                        string executionStatus = "";
+                        if (accepted)
+                        {
+                            executionStatus = DBOrder.Status.EXECUTED;
+                        }
+                        else
+                        {
+                            executionStatus = DBOrder.Status.NEW;
+                        }
+
+                        int updateResult = dbWorker.Orders.UpdateOrder(order.id, order.ownerId, order.instrumentId, order.createdDate, executionDate, order.type, order.price, order.amount, executionStatus, executorId, executionDate);
+                        if (updateResult > 0)
+                        {
+                            order.status = executionStatus;
+                            order.executorId = executorId;
+                            order.executionDate = executionDate;
+                            if (accepted)
                             {
-                                order = updatedOrders[0];
-                                Clients.All.jsExecuteOrderDone(order);
                                 OrderHistory orderHistory = NewOrderHistory(order);
+                                Clients.All.jsRemoveOrder(order);
                                 Clients.Clients(executorConnectionIds).jsAddOrderHistory(orderHistory);
                                 Clients.Clients(ownerConnectionIds).jsAddOrderHistory(orderHistory);
-                                UnlockAfterTimeout(order);
+                            }
+                            else
+                            {
+                                Clients.All.jsExecuteOrderDeclined(order);
                             }
                         }
                     }

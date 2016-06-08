@@ -39,6 +39,7 @@ namespace DBApi
         {
             public const string NEW = "New";
             public const string LOCKED = "Locked";
+            public const string PENDING = "Pending";
             public const string EXECUTED = "Executed";
         }
     }
