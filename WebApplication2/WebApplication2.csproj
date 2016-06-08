@@ -194,7 +194,7 @@
     </Compile>
     <Compile Include="Hubs\OrdersHub.cs" />
     <Compile Include="Hubs\ConnectionManager.cs" />
-    <Compile Include="Models\OrderHistory.cs" />
+    <Compile Include="Models\ExtendedOrder.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Startup.cs" />
   </ItemGroup>

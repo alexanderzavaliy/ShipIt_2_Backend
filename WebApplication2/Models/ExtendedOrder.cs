@@ -5,7 +5,7 @@ using System.Web;
 
 namespace WebApplication2.Models
 {
-    public class OrderHistory
+    public class ExtendedOrder
     {
         public long id { get; set; }
         public long ownerId { get; set; }
@@ -27,7 +27,7 @@ namespace WebApplication2.Models
         public long executionDate { get; set; }
         public string executionDateStr { get; set; }
 
-        public OrderHistory()
+        public ExtendedOrder()
         {
             id = 0;
             ownerId = 0;

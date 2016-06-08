@@ -135,6 +135,17 @@ namespace DBApi
             return -1;
         }
 
+        public int DeleteOrder(long id)
+        {
+            if (connection != null)
+            {
+                string sql = string.Format("DELETE FROM {0} WHERE id = {1}", ORDERS_TABLE_NAME, id);
+                SQLiteCommand command = new SQLiteCommand(sql, connection);
+                return command.ExecuteNonQuery();
+            }
+            return -1;
+        }
+
         public int UpdateOrder(long id, long ownerId, long instrumentId, long createdDate, long endDate, string type, double price, long amount, string status, long executorId, long executionDate)
         {
             if (connection != null)

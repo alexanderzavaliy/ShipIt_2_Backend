@@ -84,25 +84,19 @@ namespace WebApplication2.Hubs
             if (isValidAuthCookieValue(authCookieValue, ref dbCookie))
             {
                 List<DBOrder> orders = dbWorker.Orders.SelectAllNotExecutedOrders();
-                Clients.Caller.jsAddOrders(orders);                
+                List<ExtendedOrder> extOrders = new List<ExtendedOrder>();
+                foreach (DBOrder order in orders)
+                {
+                    ExtendedOrder extOrder = NewExtendedOrder(order);
+                    extOrders.Add(extOrder);
+                }
+                Clients.Caller.jsAddOrders(extOrders);                
             }
             else
             {
                 HandleInvalidCookies(authCookieValue);
             }
          }
-
-        public List<DBOrder> GetOrdersForOwner()
-        {
-            System.Diagnostics.Debug.WriteLine("GetOrdersForOwner called");
-            long ownerId = 0;
-            //
-            // TODO: 1. validate cookies, find out ownerId using them
-            //       
-            List<DBOrder> orders = dbWorker.Orders.SelectOrdersForOwner(ownerId);
-            Clients.Caller.jsAddOrder(orders);
-            return orders;
-        }
 
         public void InsertOrder(string instrumentShortName, string type, double price, int amount)
         {
@@ -121,7 +115,8 @@ namespace WebApplication2.Hubs
                         List<DBOrder> insertedOrder = OrdersHub.dbWorker.Orders.SelectLastOrderForOwner(dbCookie.ownerId);
                         if (insertedOrder.Count > 0)
                         {
-                            Clients.All.jsAddOrder(insertedOrder[0]);
+                            ExtendedOrder extendedOrder = NewExtendedOrder(insertedOrder[0]);
+                            Clients.All.jsAddOrder(extendedOrder);
                         }
                     }
                 }
@@ -132,20 +127,31 @@ namespace WebApplication2.Hubs
             }
         }
 
-        public bool DeleteOrder(long id)
+        public void DeleteOrder(long id)
         {
             System.Diagnostics.Debug.WriteLine("DeleteOrder called");
-            //
-            // TODO: 1. implement DeleteOrder(...) in DBOrdersTable
-            //       2. use DeleteOrder(...) below
-
-            //int deleteResult = OrdersHub.dbWorker.Orders.DeleteOrder(id);
-            //if (deleteResult >= 0)
-            //{
-            //    Clients.All.jsRemoveBid(id);
-            //    return true;
-            //}
-            return false;
+            string authCookieValue = GetAuthCookieValue();
+            DBCookie dbCookie = null;
+            if (isValidAuthCookieValue(authCookieValue, ref dbCookie))
+            {
+                List<DBOrder> orders = dbWorker.Orders.SelectOrdersById(id);
+                if (orders.Count > 0)
+                {
+                    DBOrder order = orders[0];
+                    if (dbCookie.ownerId.Equals(order.ownerId))
+                    {
+                        int deleteResult = OrdersHub.dbWorker.Orders.DeleteOrder(id);
+                        if (deleteResult > 0)
+                        {
+                            Clients.All.jsRemoveOrder(order);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                HandleInvalidCookies(authCookieValue);
+            }
         }
 
         public void LockOrder(long id)
@@ -174,28 +180,30 @@ namespace WebApplication2.Hubs
                             order.status = lockedStatus;
                             order.executorId = lockedExecutorId;
                             order.executionDate = lockedExecutionDate;
-                            Clients.Client(Context.ConnectionId).jsLockOrderAccepted(order, "true");
+                            ExtendedOrder extOrder = NewExtendedOrder(order);
+                            Clients.Client(Context.ConnectionId).jsLockOrderAccepted(extOrder, "true");
                             foreach (string connectionId in lockerConnectionIds)
                             {
                                 if (connectionId != Context.ConnectionId)
                                 {
-                                    Clients.Client(connectionId).jsLockOrderAccepted(order, "true_other");
+                                    Clients.Client(connectionId).jsLockOrderAccepted(extOrder, "true_other");
                                 }
                             }
-                            Clients.Clients(othersConnectionIds).jsLockOrderAccepted(order, "false");
+                            Clients.Clients(othersConnectionIds).jsLockOrderAccepted(extOrder, "false");
                             UnlockAfterTimeout(order);
                         }
                     }
                     else if (orderIsLocked)
                     {
+                        ExtendedOrder extOrder = NewExtendedOrder(order);
                         bool callerIsExecutor = dbCookie.ownerId.Equals(order.executorId);
                         if (callerIsExecutor)
                         {
-                            Clients.Clients(lockerConnectionIds).jsLockOrderAccepted(order, "true_other");
+                            Clients.Clients(lockerConnectionIds).jsLockOrderAccepted(extOrder, "true_other");
                         }
                         else
                         {
-                            Clients.Clients(lockerConnectionIds).jsLockOrderAccepted(order, "false");
+                            Clients.Clients(lockerConnectionIds).jsLockOrderAccepted(extOrder, "false");
                         }
                     }
                     else
@@ -221,14 +229,17 @@ namespace WebApplication2.Hubs
                 {
                     if (orders[0].status.Equals(DBOrder.Status.LOCKED))
                     {
-                        int updateResult = dbWorker.Orders.UpdateOrder(lockedOrder.id, lockedOrder.ownerId, lockedOrder.instrumentId, lockedOrder.createdDate, lockedOrder.endDate, lockedOrder.type, lockedOrder.price, lockedOrder.amount, DBOrder.Status.NEW, 0, 0);
+                        string newStatus = DBOrder.Status.NEW;
+                        long executorId = 0;
+                        long executionDate = 0;
+                        int updateResult = dbWorker.Orders.UpdateOrder(lockedOrder.id, lockedOrder.ownerId, lockedOrder.instrumentId, lockedOrder.createdDate, lockedOrder.endDate, lockedOrder.type, lockedOrder.price, lockedOrder.amount, newStatus, executorId, executionDate);
                         if (updateResult > 0)
                         {
-                            List<DBOrder> updatedOrders = dbWorker.Orders.SelectOrdersById(lockedOrder.id);
-                            if (updatedOrders.Count > 0)
-                            {
-                                Clients.All.jsUnlockOrder(updatedOrders[0]);
-                            }
+                            orders[0].status = newStatus;
+                            orders[0].executorId = executorId;
+                            orders[0].executionDate = executionDate;
+                            ExtendedOrder extOrder = NewExtendedOrder(orders[0]);
+                            Clients.All.jsUnlockOrder(extOrder);
                         }
                     }
                 }
@@ -261,7 +272,8 @@ namespace WebApplication2.Hubs
                                 order.status = unlockedStatus;
                                 order.executorId = unlockedExecutorId;
                                 order.executionDate = unlockedExecutionDate;
-                                Clients.All.jsUnlockOrder(orders[0]);
+                                ExtendedOrder extOrder = NewExtendedOrder(orders[0]);
+                                Clients.All.jsUnlockOrder(extOrder);
                             }
                         }
                     }
@@ -299,7 +311,8 @@ namespace WebApplication2.Hubs
                             order.status = pendingStatus;
                             order.executorId = executorId;
                             order.executionDate = executionDate;
-                            Clients.All.jsPendingOrderDone(order);
+                            ExtendedOrder extOrder = NewExtendedOrder(order);
+                            Clients.All.jsPendingOrderDone(extOrder);
                         }
                     }
                 }
@@ -326,7 +339,7 @@ namespace WebApplication2.Hubs
                     IList<string> ownerConnectionIds = connectionManager.GetConnectionIdsExcept(dbCookie.ownerId);
                     if (orderIsPending)
                     {
-                        long executorId = dbCookie.ownerId;
+                        long executorId = order.executorId;
                         long executionDate = DateTime.Now.Ticks;
                         string executionStatus = "";
                         if (accepted)
@@ -344,16 +357,16 @@ namespace WebApplication2.Hubs
                             order.status = executionStatus;
                             order.executorId = executorId;
                             order.executionDate = executionDate;
+                            ExtendedOrder extOrder = NewExtendedOrder(order);
                             if (accepted)
                             {
-                                OrderHistory orderHistory = NewOrderHistory(order);
-                                Clients.All.jsRemoveOrder(order);
-                                Clients.Clients(executorConnectionIds).jsAddOrderHistory(orderHistory);
-                                Clients.Clients(ownerConnectionIds).jsAddOrderHistory(orderHistory);
+                                Clients.All.jsRemoveOrder(extOrder);
+                                Clients.Clients(executorConnectionIds).jsAddOrderHistory(extOrder);
+                                Clients.Clients(ownerConnectionIds).jsAddOrderHistory(extOrder);
                             }
                             else
                             {
-                                Clients.All.jsExecuteOrderDeclined(order);
+                                Clients.All.jsExecuteOrderDeclined(extOrder);
                             }
                         }
                     }
@@ -375,10 +388,10 @@ namespace WebApplication2.Hubs
                 List<DBOrder> orders = dbWorker.Orders.SelectOrdersRelatedToUser(dbCookie.ownerId, ORDERS_BACKTIME_PERIOD);
                 if (orders.Count > 0)
                 {
-                    List<OrderHistory> ordersHistory = new List<OrderHistory>();
+                    List<ExtendedOrder> ordersHistory = new List<ExtendedOrder>();
                     foreach (DBOrder order in orders)
                     {
-                        OrderHistory orderHistory = NewOrderHistory(order);
+                        ExtendedOrder orderHistory = NewExtendedOrder(order);
                         ordersHistory.Add(orderHistory);
                     }
                     Clients.Caller.jsAddOrdersHistory(ordersHistory);
@@ -475,42 +488,42 @@ namespace WebApplication2.Hubs
             Clients.Caller.jsDeleteCookie(OrdersHub.LOGIN_COOKIE_NAME);
         }
 
-        private OrderHistory NewOrderHistory(DBOrder order)
+        private ExtendedOrder NewExtendedOrder(DBOrder order)
         {
-            OrderHistory orderHistory = new OrderHistory();
-            orderHistory.id = order.id;
-            orderHistory.instrumentId = order.instrumentId;
-            orderHistory.ownerId = order.ownerId;
-            orderHistory.executorId = order.executorId;
-            orderHistory.type = order.type;
-            orderHistory.price = order.price;
-            orderHistory.amount = order.amount;
-            orderHistory.status = order.status;
-            orderHistory.createdDate = order.createdDate;
-            orderHistory.createdDateStr = new DateTime(order.createdDate).ToString();
-            orderHistory.endDate = order.endDate;
-            orderHistory.endDateStr = new DateTime(order.endDate).ToString();
-            orderHistory.executionDate = order.executionDate;
-            orderHistory.executionDateStr = new DateTime(order.executionDate).ToString();
+            ExtendedOrder extendedOrder = new ExtendedOrder();
+            extendedOrder.id = order.id;
+            extendedOrder.instrumentId = order.instrumentId;
+            extendedOrder.ownerId = order.ownerId;
+            extendedOrder.executorId = order.executorId;
+            extendedOrder.type = order.type;
+            extendedOrder.price = order.price;
+            extendedOrder.amount = order.amount;
+            extendedOrder.status = order.status;
+            extendedOrder.createdDate = order.createdDate;
+            extendedOrder.createdDateStr = new DateTime(order.createdDate).ToString();
+            extendedOrder.endDate = order.endDate;
+            extendedOrder.endDateStr = new DateTime(order.endDate).ToString();
+            extendedOrder.executionDate = order.executionDate;
+            extendedOrder.executionDateStr = new DateTime(order.executionDate).ToString();
 
             List<DBInstrument> instruments = dbWorker.Instruments.SelectInstrumentById(order.instrumentId);
             if (instruments.Count > 0)
             {
-                orderHistory.instrumentShortName = instruments[0].shortName;
+                extendedOrder.instrumentShortName = instruments[0].shortName;
             }
             List<DBUser> owners = dbWorker.Users.SelectUserById(order.ownerId);
             if (owners.Count > 0)
             {
-                orderHistory.ownerEmail = owners[0].email;
-                orderHistory.ownerScype = owners[0].scype;
+                extendedOrder.ownerEmail = owners[0].email;
+                extendedOrder.ownerScype = owners[0].scype;
             }
             List<DBUser> executors = dbWorker.Users.SelectUserById(order.executorId);
             if (executors.Count > 0)
             {
-                orderHistory.executorEmail = executors[0].email;
-                orderHistory.executorScype = executors[0].scype;
+                extendedOrder.executorEmail = executors[0].email;
+                extendedOrder.executorScype = executors[0].scype;
             }
-            return orderHistory;
+            return extendedOrder;
         }
 
         private string GenerateRandomString()
